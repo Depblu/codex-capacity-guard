@@ -29,8 +29,8 @@ def find_codex() -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    initial_delay: float = 30.0
-    max_delay: float = 120.0
+    initial_delay: float = 10.0
+    max_delay: float = 60.0
     poll_interval: float = 2.0
     jitter: float = 0.15
     codex_bin: str = ""
@@ -52,7 +52,8 @@ class Settings:
 
     def delay(self, attempts: int, random_fraction: float = 0.5) -> float:
         # Bound the exponent even after months of capacity failures.
-        base = min(self.max_delay, self.initial_delay * 2 ** min(max(attempts, 0), 20))
+        multiplier = 1 if attempts <= 0 else 3 * 2 ** min(attempts - 1, 20)
+        base = min(self.max_delay, self.initial_delay * multiplier)
         return base * (1 + self.jitter * (2 * random_fraction - 1))
 
 

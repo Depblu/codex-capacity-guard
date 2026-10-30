@@ -60,7 +60,7 @@ Then continue your task normally. While the watcher is enabled and running, you 
 
 ## What happens after a capacity error?
 
-The watcher waits about **30 seconds**, then submits a continuation to the **same conversation**. If that new turn also fails with the capacity error, the next delay is about **60 seconds**, then **120 seconds** for later attempts. Delays include ±15% jitter and there is no retry-count limit.
+The watcher waits about **10 seconds**, then submits a continuation to the **same conversation**. If that new turn also fails with the capacity error, the next delay is about **30 seconds**, then **60 seconds** for the third and later attempts. Delays include ±15% jitter and there is no retry-count limit.
 
 You may see a message starting with:
 

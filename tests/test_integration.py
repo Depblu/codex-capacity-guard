@@ -51,7 +51,7 @@ class IntegrationTests(unittest.TestCase):
             self.assertEqual("original-model", store.recovery(event.thread_id)["model"])
             engine.tick()
             self.assertEqual([], desktop.sent)
-            now[0] += 30
+            now[0] += 10
             engine.tick()
             self.assertEqual(1, len(desktop.sent))
             sent = desktop.sent[0]["params"]["turnStart"]

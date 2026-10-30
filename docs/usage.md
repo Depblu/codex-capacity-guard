@@ -148,11 +148,13 @@ position. A conversation already stopped by a capacity error may need one manual
 ## Waiting intervals / 等待间隔
 
 ```sh
-python3 scripts/capacity_guard.py configure --initial-delay 30 --max-delay 120
+python3 scripts/capacity_guard.py configure --initial-delay 10 --max-delay 60
 ```
 
-Defaults: `initial_delay=30`, `max_delay=120`, `poll_interval=2`, `jitter=0.15`.
-Intervals grow exponentially to the cap, with jitter. There is no maximum attempt
+Defaults: `initial_delay=10`, `max_delay=60`, `poll_interval=2`, `jitter=0.15`.
+The first interval uses `initial_delay`, the second uses three times that delay,
+and later intervals double up to `max_delay`, with jitter. The default base
+intervals are 10, 30, then 60 seconds for all later attempts. There is no maximum attempt
 count. Configuration changes apply after restarting the watcher as described above.
 
 ## Optional adapters / 可选后端

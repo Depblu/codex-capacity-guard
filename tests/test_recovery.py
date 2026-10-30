@@ -46,13 +46,16 @@ class RecoveryTests(unittest.TestCase):
 
     def due(self):
         self.engine.observe(self.event())
-        self.now += 30
+        self.now += 10
 
     def test_capacity_waits_then_continues_original_model_once(self):
         self.engine.observe(self.event())
         self.engine.tick()
         self.assertEqual([], self.backend.sent)
-        self.now += 30
+        self.now += 9
+        self.engine.tick()
+        self.assertEqual([], self.backend.sent)
+        self.now += 1
         self.engine.tick()
         self.engine.tick()
         self.assertEqual(1, len(self.backend.sent))
@@ -65,7 +68,7 @@ class RecoveryTests(unittest.TestCase):
             self.backend.snapshot = Snapshot(turn, "failed", "original-model")
             self.engine.observe(self.event(turn=turn))
             state = self.store.recovery(THREAD)
-            expected_delay = min(30 * 2 ** min(attempt, 10), 120)
+            expected_delay = (10, 30, 60)[min(attempt, 2)]
             self.assertEqual(expected_delay, state["next_at"] - self.now)
             self.now = state["next_at"]
             self.engine.tick()
@@ -138,7 +141,7 @@ class RecoveryTests(unittest.TestCase):
         self.due()
         self.backend.error = TimeoutError()
         self.engine.tick()
-        self.now += 120
+        self.now += 60
         self.engine.tick()
         self.assertEqual(1, len(self.backend.sent))
         self.assertEqual("uncertain", self.store.recovery(THREAD)["status"])
@@ -155,7 +158,10 @@ class RecoveryTests(unittest.TestCase):
         self.backend.error = Unavailable()
         self.engine.tick()
         self.backend.error = None
-        self.now += 120
+        self.now += 59
+        self.engine.tick()
+        self.assertEqual(1, len(self.backend.sent))
+        self.now += 1
         self.engine.tick()
         self.assertEqual(2, len(self.backend.sent))
 
@@ -169,7 +175,16 @@ class RecoveryTests(unittest.TestCase):
         self.assertFalse(self.backend.sent)
 
     def test_attempt_delay_is_bounded_even_after_many_failures(self):
-        self.assertLessEqual(Settings().delay(10**6, 1), 138)
+        self.assertEqual(Settings().delay(10**6, 1), 69)
+
+    def test_delay_preserves_jitter_and_configured_cap(self):
+        settings = Settings()
+        for attempts, base in ((0, 10), (1, 30), (2, 60), (3, 60)):
+            with self.subTest(attempts=attempts):
+                self.assertAlmostEqual(settings.delay(attempts, 0), base * .85)
+                self.assertAlmostEqual(settings.delay(attempts, 1), base * 1.15)
+        custom = Settings(initial_delay=5, max_delay=20, jitter=0)
+        self.assertEqual([custom.delay(n) for n in range(4)], [5, 15, 20, 20])
 
 
 if __name__ == "__main__":
