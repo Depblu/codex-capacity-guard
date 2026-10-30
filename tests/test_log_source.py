@@ -18,11 +18,13 @@ TARGET = "codex_core::session::turn"
 
 
 def failure_body(error=CAPACITY, *, thread=THREAD, turn=TURN,
-                 model="gpt-6-astra", thread_key="thread.id", turn_key="turn.id"):
+                 model="gpt-6-astra", thread_key="thread.id", turn_key="turn.id",
+                 run_turn_attributes=""):
     model_field = f" model={model}" if model is not None else ""
     return (
         f"thread{{{thread_key}={thread}}}:turn{{{turn_key}={turn}{model_field} "
-        f"codex.turn.reasoning_effort=max}}:session_task.run:run_turn: "
+        f"codex.turn.reasoning_effort=max}}:session_task.run:run_turn"
+        f"{run_turn_attributes}: "
         f"Turn error: {error}"
     )
 
@@ -61,6 +63,44 @@ class LogSourceTests(unittest.TestCase):
             log_id, 100.125, THREAD, TURN, "gpt-6-astra", True
         )])
         self.assertNotIn(CAPACITY, repr(events))
+
+    def test_codex_0166_run_turn_span_attributes_are_accepted(self):
+        log_id = self.insert(failure_body(
+            run_turn_attributes=(
+                f"{{conversation.id={THREAD} turn.id=\"{TURN}\"}}"
+            )
+        ))
+        events, cursor = self.source.read_after(0)
+        self.assertEqual(cursor, log_id)
+        self.assertEqual(events, [FailureEvent(
+            log_id, 100.125, THREAD, TURN, "gpt-6-astra", True
+        )])
+
+    def test_run_turn_span_conflicting_or_malformed_fields_are_rejected(self):
+        for attributes in (
+            f"{{turn.id={OTHER_TURN}}}",
+            "{turn.id=invalid}",
+            f"{{thread.id={OTHER_TURN}}}",
+            f"{{turn.id={TURN}\n}}",
+            f"{{nested{{turn.id={TURN}}}}}",
+            f"{{turn.id={TURN}",
+        ):
+            last = self.insert(failure_body(run_turn_attributes=attributes))
+        self.assertEqual(self.source.read_after(0), ([], last))
+
+    def test_new_run_turn_span_preserves_error_and_target_checks(self):
+        attributes = f"{{conversation.id={THREAD} turn.id={TURN}}}"
+        self.insert(failure_body(run_turn_attributes=attributes), target="other")
+        self.insert("User said: " + failure_body(run_turn_attributes=attributes))
+        self.insert(failure_body(run_turn_attributes=attributes).replace(
+            "Turn error: ", "User text: "
+        ))
+        last = self.insert(failure_body(
+            error=f"{CAPACITY} Additional error.", run_turn_attributes=attributes,
+        ))
+        self.assertEqual(self.source.read_after(0), ([FailureEvent(
+            last, 100.125, THREAD, TURN, "gpt-6-astra", False
+        )], last))
 
     def test_old_and_new_field_names_accept_independently_quoted_values(self):
         cursor = 0

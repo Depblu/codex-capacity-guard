@@ -17,7 +17,12 @@ from uuid import UUID
 
 
 _TURN_TARGET = "codex_core::session::turn"
-_ERROR_BOUNDARY = "}:session_task.run:run_turn: Turn error: "
+# Codex 0.166 added span attributes to ``run_turn``. Keep the match bounded to
+# one span so unrelated log text cannot become a turn error.
+_ERROR_BOUNDARY = "}:session_task.run:run_turn"
+_ERROR_BOUNDARY_RE = re.compile(
+    r"}:session_task\.run:run_turn(?:\{[^{}\r\n]*\})?: Turn error: "
+)
 _CAPACITY_ERROR = (
     "Selected model is at capacity. Please try a different model."
 )
@@ -70,10 +75,13 @@ def _parse_failure(row: tuple) -> FailureEvent | None:
     ):
         return None
 
-    prefix, boundary, error = body.partition(_ERROR_BOUNDARY)
+    boundary_match = _ERROR_BOUNDARY_RE.search(body)
+    if boundary_match is None:
+        return None
+    prefix = body[:boundary_match.end()]
+    error = body[boundary_match.end():]
     if (
-        not boundary
-        or not error.strip()
+        not error.strip()
         or _SPAN_START_RE.match(prefix) is None
         or "\n" in prefix
         or "\r" in prefix
